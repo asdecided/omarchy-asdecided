@@ -24,9 +24,9 @@ Built from $GITHUB_SHA. Native tests and Arch install, upgrade and removal check
 Download, verify and install with Pacman:
 
 \`\`\`bash
-curl -fLO $base/$package && \
-  curl -fLO $base/$package.sha256 && \
-  sha256sum -c $package.sha256 && \
+curl -fLO $base/$package && \\
+  curl -fLO $base/$package.sha256 && \\
+  sha256sum -c $package.sha256 && \\
   sudo pacman -U ./$package
 \`\`\`
 
@@ -39,9 +39,11 @@ if ! gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
         --draft --prerelease --title "AsDecided development ${GITHUB_SHA:0:12}" --notes-file "$notes"
 fi
 [[ $(gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json targetCommitish --jq .targetCommitish) == "$GITHUB_SHA" ]]
+# GitHub normalizes a leading-dot asset name to default.SRCINFO.
+cp .SRCINFO default.SRCINFO
 # A retry may complete a partially uploaded draft, but never replace existing bytes.
 assets=$(gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name')
-for file in "$package" "$package.sha256" PKGBUILD .SRCINFO SOURCE_COMMIT; do
+for file in "$package" "$package.sha256" PKGBUILD default.SRCINFO SOURCE_COMMIT; do
     if grep -Fxq -- "$file" <<< "$assets"; then
         gh release download "$tag" --repo "$GITHUB_REPOSITORY" --pattern "$file" --dir "$verify_dir"
         cmp -- "$file" "$verify_dir/$file"
