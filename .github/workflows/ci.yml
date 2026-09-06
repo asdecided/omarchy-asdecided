@@ -1,0 +1,59 @@
+name: Native application
+on:
+  push:
+    branches: [main, 'codex/**']
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native:
+    name: Rust and Qt workflow
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Install Qt build and runtime dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake g++ qt6-base-dev qt6-declarative-dev qt6-wayland qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-layouts qml6-module-qtquick-dialogs qml6-module-qtquick-window qml6-module-qtqml-workerscript qml6-module-qtquick-templates libgl1-mesa-dev desktop-file-utils
+      - run: cargo fmt --check
+      - run: cargo clippy --locked --all-targets -- -D warnings
+      - run: cargo test --locked
+      - name: Compile native window
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --parallel 2
+          ctest --test-dir build --output-on-failure
+      - name: Render the actual QML window
+        env:
+          QT_QPA_PLATFORM: offscreen
+          QT_QUICK_BACKEND: software
+          ASDECIDED_BACKEND: ${{ github.workspace }}/target/debug/asdecided-desktop-backend
+        run: |
+          ./build/asdecided --smoke-test "$PWD/tests/fixture" --screenshot "$PWD/build/smoke.png" 2> build/qml.log
+          cat build/qml.log
+          test -s build/smoke.png
+          if grep -E 'qrc:|failed to load component' build/qml.log; then exit 1; fi
+          desktop-file-validate packaging/io.github.asdecided.AsDecided.desktop
+      - name: Build and verify installable bundle
+        run: |
+          cargo build --release --locked
+          ./packaging/bundle.sh
+          bundle=$(find dist -mindepth 1 -maxdepth 1 -type d -name 'asdecided-*' -print -quit)
+          "$bundle/install.sh" "$RUNNER_TEMP/asdecided install"
+          "$bundle/install.sh" "$RUNNER_TEMP/asdecided install"
+          QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software "$RUNNER_TEMP/asdecided install/bin/asdecided" --smoke-test "$PWD/tests/fixture"
+          desktop-file-validate "$RUNNER_TEMP/asdecided install/share/applications/io.github.asdecided.AsDecided.desktop"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: asdecided-linux-x86_64
+          path: |
+            dist/*.tar.gz
+            dist/*.sha256
+            build/smoke.png
+            build/qml.log
