@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=AsDecided
+GenericName=Engineering Decision Workspace
+Comment=Browse and inspect the decisions your agents follow
+Exec=asdecided %f
+Icon=io.github.asdecided.AsDecided
+Terminal=false
+Categories=Development;Utility;
+Keywords=decisions;architecture;requirements;Omarchy;
+StartupWMClass=io.github.asdecided.AsDecided
