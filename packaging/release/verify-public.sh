@@ -13,8 +13,8 @@ package=${PACKAGE_URL##*/}
 [[ $package =~ ^asdecided-desktop-[a-zA-Z0-9._-]+\.pkg\.tar\.zst$ ]]
 curl --fail --location --retry 3 --output "$package" "$PACKAGE_URL"
 sha256sum -c package.sha256
-# Exercise precisely the URL installation command shown to users.
-pacman -U --noconfirm "$PACKAGE_URL"
+# Install the verified download using the standard local-file policy.
+pacman -U --noconfirm "./$package"
 [[ $(pacman -Q asdecided-desktop) == *"g${EXPECTED_REVISION:0:12}"* ]]
 pacman -Qkk asdecided-desktop
 [[ $(stat -c '%u:%g' /usr/bin/asdecided) == 0:0 ]]

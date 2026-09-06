@@ -21,10 +21,13 @@ Native AsDecided development build for Omarchy / Arch Linux (Intel/AMD 64-bit).
 
 Built from $GITHUB_SHA. Native tests and Arch install, upgrade and removal checks passed before publication. Real Omarchy/Wayland desktop acceptance remains pending.
 
-Install directly with Pacman:
+Download, verify and install with Pacman:
 
 \`\`\`bash
-sudo pacman -U $base/$package
+curl -fLO $base/$package && \
+  curl -fLO $base/$package.sha256 && \
+  sha256sum -c $package.sha256 && \
+  sudo pacman -U ./$package
 \`\`\`
 
 Open **AsDecided** from the application launcher. Pacman resolves the Qt dependencies. Updates use the newer release's install command; remove with \`sudo pacman -R asdecided-desktop\`. Project files and drafts are preserved.

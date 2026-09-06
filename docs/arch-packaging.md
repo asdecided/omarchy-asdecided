@@ -71,8 +71,8 @@ The publisher checks source identity and checksums, fills a draft with the packa
 and metadata, and then publishes it. Retrying compares existing asset bytes and
 only uploads missing files. Conflicting bytes stop the job; uploads never use
 `--clobber`. A separate clean Arch container downloads without GitHub credentials,
-checks the checksum, installs from the public URL, verifies the installed revision
+checks the checksum, installs the verified local download, verifies the installed revision
 and window launch, and removes the app. Its result is part of the publishing job.
 
-The release notes carry the exact one-command install URL. GitHub Actions ZIPs
+The release notes carry the exact download, checksum and install commands. GitHub Actions ZIPs
 remain available for contributors, but are no longer the normal install route.

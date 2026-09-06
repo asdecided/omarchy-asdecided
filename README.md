@@ -31,8 +31,8 @@ installation is required. Parent sources must already be materialised locally.
 ## Install on Omarchy / Arch
 
 Open the [public development releases](https://github.com/asdecided/omarchy-asdecided/releases)
-and copy the **Install directly with Pacman** command from the release notes.
-It downloads and installs the package directly from GitHub; no account, ZIP
+and copy the **Download, verify and install with Pacman** commands from the release notes.
+They download and verify the package from GitHub, then install it with Pacman; no account, ZIP
 extraction or local compiler is needed.
 
 Alternatively, download the `.pkg.tar.zst` and adjacent checksum from the release,
