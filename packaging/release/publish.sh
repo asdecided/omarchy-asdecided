@@ -35,6 +35,7 @@ if ! gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
     gh release create "$tag" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
         --draft --prerelease --title "AsDecided development ${GITHUB_SHA:0:12}" --notes-file "$notes"
 fi
+[[ $(gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json targetCommitish --jq .targetCommitish) == "$GITHUB_SHA" ]]
 # A retry may complete a partially uploaded draft, but never replace existing bytes.
 assets=$(gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name')
 for file in "$package" "$package.sha256" PKGBUILD .SRCINFO SOURCE_COMMIT; do
