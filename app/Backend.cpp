@@ -60,6 +60,8 @@ QVariantMap provenance(const QVariantMap &doc) {
 }
 
 Backend::Backend(QObject *parent) : QObject(parent) {
+    recoveryTimer.setSingleShot(true);recoveryTimer.setInterval(650);
+    connect(&recoveryTimer,&QTimer::timeout,this,&Backend::persistRecovery);
     deadline.setSingleShot(true);
     deadline.setInterval(30000);
     connect(&deadline, &QTimer::timeout, this, [this] { fail("The operation took too long. Try a smaller corpus or run the decided CLI for diagnostics."); });
@@ -78,6 +80,7 @@ Backend::Backend(QObject *parent) : QObject(parent) {
 }
 
 Backend::~Backend() {
+    persistRecovery();
     if (busy()) { process.kill(); process.waitForFinished(3000); }
 }
 
@@ -86,13 +89,16 @@ QStringList Backend::recentProjects() const {
 }
 
 void Backend::openProjectUrl(const QUrl &url) { if (url.isLocalFile()) openProject(url.toLocalFile()); }
-void Backend::openProject(const QString &path) { start("open", path); }
-void Backend::refresh() { if (!projectPath.isEmpty()) start("open", projectPath); }
+void Backend::openProject(const QString &path) {
+    if(busy())return;
+    if(hasDirty()){deferredAction="open";deferredArgument=path;emit discardRequested();return;}
+    start("open",path);
+}
+void Backend::refresh() { if (!projectPath.isEmpty()) openProject(projectPath); }
 void Backend::search(const QString &query) {
     if (busy() || projectPath.isEmpty()) return;
     if (query.trimmed().isEmpty()) {
         visibleDocuments = allDocuments;
-        selectedDocument.clear();
         statusText = QString::number(visibleDocuments.size()) + " artifacts";
         emit documentsChanged(); emit selectionChanged(); emit changed();
     } else start("search", projectPath, query);
@@ -102,15 +108,14 @@ void Backend::validate() { if (!projectPath.isEmpty()) start("validate", project
 void Backend::federation() { if (!projectPath.isEmpty()) start("federation", projectPath); }
 void Backend::select(int index) {
     if (index >= 0 && index < visibleDocuments.size()) {
-        selectedDocument = visibleDocuments[index].toMap();
-        emit selectionChanged();
+        openDocument(visibleDocuments[index].toMap());
     }
 }
 void Backend::openSelected() {
     if (!selectedDocument.isEmpty() && provenance(selectedDocument).value("layer", "local").toString() == "local")
         start("locate", projectPath, selectedDocument.value("metadata").toMap().value("path").toString());
 }
-void Backend::cancel() { if (busy()) fail("Operation cancelled."); }
+void Backend::cancel() { if (busy() && operation != "save") fail("Operation cancelled."); }
 void Backend::dismissReport() { reportText.clear(); reportName.clear(); emit changed(); }
 void Backend::forgetRecent(const QString &path) {
     auto recent = recentProjects(); recent.removeAll(path);
@@ -120,7 +125,7 @@ void Backend::fail(const QString &message) {
     aborted = true; errorText = message; process.kill(); emit changed();
 }
 
-void Backend::start(const QString &op, const QString &project, const QString &query) {
+void Backend::start(const QString &op, const QString &project, const QString &query, const QVariantMap &extra) {
     if (busy()) return;
     operation = op;
     output.clear(); diagnostics.clear(); errorText.clear(); aborted = false;
@@ -130,7 +135,8 @@ void Backend::start(const QString &op, const QString &project, const QString &qu
     process.setProgram(backend);
     process.setArguments({});
     process.start();
-    const QJsonObject request{{"protocol", 1}, {"operation", op}, {"project", project}, {"query", query}};
+    QJsonObject request=QJsonObject::fromVariantMap(extra);
+    request.insert("protocol",1);request.insert("operation",op=="refresh_index"?"open":op);request.insert("project",project);request.insert("query",query);
     process.write(QJsonDocument(request).toJson(QJsonDocument::Compact));
     process.closeWriteChannel();
     deadline.start();
@@ -167,7 +173,6 @@ void Backend::applyMatches(const QVariantList &matches) {
         if (!mapped) ++unavailable;
     }
     visibleDocuments = found;
-    selectedDocument.clear();
     statusText = QString::number(matches.size()) + " results";
     if (unavailable) errorText = "The corpus changed since it was opened. Refresh to load all matching documents.";
 }
@@ -185,19 +190,62 @@ void Backend::finish(int exitCode, QProcess::ExitStatus exitStatus) {
         emit changed(); emit completed(operation, false); return;
     }
     const auto data = json.object().toVariantMap();
-    if ((operation == "open" || operation == "locate") ? data.value("protocol").toInt() != 1 : data.value("schema_version").toString() != "1") {
+    if ((operation != "search" && operation != "scope" && operation != "validate" && operation != "federation") ? data.value("protocol").toInt() != 1 : data.value("schema_version").toString() != "1") {
         errorText = "Unsupported backend response version.";
         statusText = "Operation failed";
         emit changed(); emit completed(operation, false); return;
     }
-    if (operation == "open") {
+    if (operation == "open" || operation == "refresh_index") {
         projectPath = data.value("project").toString(); sourceName = data.value("source").toString();
         allDocuments = data.value("documents").toList(); visibleDocuments = allDocuments;
-        selectedDocument.clear(); reportText.clear(); reportName.clear();
-        statusText = QString::number(allDocuments.size()) + " artifacts · core " + data.value("core_version").toString();
+        corpusPath=data.value("corpus").toString();graphEdges=data.value("graph").toMap().value("edges").toList();
+        if(operation=="open"){sessions.clear();currentTab=-1;restoreRecovery();publishSelection();}
+        else if(currentTab>=0){
+            for(const auto &item:allDocuments){
+                const auto doc=item.toMap();
+                if(doc.value("metadata").toMap().value("path")==selectedDocument.value("metadata").toMap().value("path")){
+                    selectedDocument.insert("title",doc.value("title"));selectedDocument.insert("text",doc.value("text"));
+                    sessions[currentTab]=selectedDocument;break;
+                }
+            }
+            publishSelection();
+        }
+        reportText.clear(); reportName.clear();
+        statusText = hasDirty() ? "Recovered unsaved drafts · review before saving" : QString::number(allDocuments.size()) + " artifacts · core " + data.value("core_version").toString();
         auto recent = recentProjects(); recent.removeAll(projectPath); recent.prepend(projectPath);
         while (recent.size() > 8) recent.removeLast();
         QSettings().setValue("recentProjects", recent);
+    } else if(operation=="initialize") {
+        statusText="Project initialized";
+        const auto newProject=data.value("project").toString();
+        QTimer::singleShot(0,this,[this,newProject]{openProject(newProject);});
+    } else if(operation=="read") {
+        auto doc=pendingDocument;
+        doc.insert("raw",data.value("text"));doc.insert("original",data.value("text"));doc.insert("hash",data.value("hash"));
+        doc.insert("new_file",false);doc.insert("read_only",false);addTab(doc);statusText="Document opened";
+    } else if(operation=="template") {
+        QVariantMap doc{{"id",data.value("id")},{"title",data.value("title")},{"type",data.value("type")},{"status","Draft"},
+            {"metadata",QVariantMap{{"path",data.value("path")},{"source",sourceName}}},
+            {"raw",data.value("text")},{"original",""},{"hash",""},{"new_file",true},{"read_only",false}};
+        addTab(doc);statusText="New draft · not yet saved";
+    } else if(operation=="review") {
+        currentReview=data;
+        QString findings;
+        const auto validation=data.value("validation").toMap();
+        for(const auto &key:{"errors","warnings","relationship_issues"}) {
+            const auto items=validation.value(key).toList();
+            for(const auto &entry:items) {
+                const auto issue=entry.toMap();
+                findings+=QString("%1 [%2]\n%3\n\n").arg(QString(key),issue.value("code").toString(),issue.value("message").toString());
+            }
+        }
+        currentReview.insert("findingsText",findings.isEmpty()?"No validation findings.":findings);
+        emit reviewChanged();emit reviewReady();statusText=data.value("valid").toBool()?"Review changes before saving":"Draft has validation errors";
+    } else if(operation=="save") {
+        selectedDocument.insert("original",data.value("text"));selectedDocument.insert("raw",data.value("text"));
+        selectedDocument.insert("hash",data.value("hash"));selectedDocument.insert("new_file",false);sessions[currentTab]=selectedDocument;
+        publishSelection();persistRecovery();statusText="Saved to your repository";errorText=data.value("warning").toString();
+        QTimer::singleShot(0,this,[this]{start("refresh_index",projectPath);});
     } else if (operation == "search") {
         applyMatches(data.value("matches").toList());
     } else if (operation == "scope") {
@@ -214,8 +262,9 @@ void Backend::finish(int exitCode, QProcess::ExitStatus exitStatus) {
         reportText = operation == "validate" ? validationReport(data) : federationReport(data);
         statusText = operation == "validate" ? (exitCode == 0 ? "Validation passed; review the report for warnings" : "Validation found errors") : "Federation verified";
     }
-    if (operation == "open" || operation == "search" || operation == "scope") {
+    if (operation == "open" || operation == "refresh_index" || operation == "search" || operation == "scope") {
         emit documentsChanged(); emit selectionChanged();
     }
-    emit changed(); emit completed(operation, true);
+    const QString finishedOperation=operation;
+    emit changed(); emit completed(finishedOperation, true);
 }

@@ -1,4 +1,5 @@
 #include "Backend.h"
+#include "MarkdownView.h"
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
@@ -13,6 +14,8 @@ int main(int argc, char *argv[]) {
     app.setApplicationVersion("0.1.0");
     app.setDesktopFileName("io.github.asdecided.AsDecided");
     QQuickStyle::setStyle("Fusion");
+    qmlRegisterType<MarkdownView>("AsDecided",1,0,"MarkdownView");
+    qmlRegisterType<MarkdownHighlighter>("AsDecided",1,0,"MarkdownHighlighter");
     Backend backend;
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty("companion", &backend);
@@ -23,15 +26,15 @@ int main(int argc, char *argv[]) {
         const int index = args.indexOf("--smoke-test");
         if (index + 1 >= args.size()) return 2;
         QObject::connect(&backend, &Backend::completed, &app, [&](const QString &op, bool ok) {
-            if (op == "open") {
-                if (ok && !backend.documents().isEmpty()) backend.select(0);
-                QTimer::singleShot(300, &app, [&, ok] {
-                    if (args.contains("--screenshot")) {
-                        int i = args.indexOf("--screenshot");
-                        auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().first());
-                        if (i + 1 < args.size() && window) window->grabWindow().save(args[i + 1]);
+            if (!ok) { app.exit(1);return; }
+            if (op=="open" && !backend.documents().isEmpty()) { backend.select(0);return; }
+            if (op=="read" || (op=="open" && backend.documents().isEmpty())) {
+                QTimer::singleShot(500,&app,[&,ok]{
+                    if(args.contains("--screenshot")) {
+                        int i=args.indexOf("--screenshot");auto *window=qobject_cast<QQuickWindow*>(engine.rootObjects().first());
+                        if(i+1<args.size() && window)window->grabWindow().save(args[i+1]);
                     }
-                    app.exit(ok ? 0 : 1);
+                    app.exit(ok?0:1);
                 });
             }
         });
