@@ -1,0 +1,9 @@
+AsDecided for Omarchy
+Copyright 2026 AsDecided contributors
+
+This product includes the AsDecided Rust engine, pinned in backend/Cargo.toml,
+from https://github.com/asdecided/core under Apache-2.0.
+
+The initial application icon (docs/images/favicon.png) and the federation test
+fixture (examples/federation/app) were copied from asdecided/core commit
+d44a4d739527b9c975d8dcee7fb26be7aae4897f, under Apache-2.0.
