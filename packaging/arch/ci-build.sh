@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Invoked as root inside the disposable Arch build container, never on a host.
 set -euo pipefail
+pacman-key --init
 pacman -Syu --noconfirm --needed cmake rust git qt6-base qt6-declarative qt6-wayland xdg-utils desktop-file-utils
 useradd --create-home builder
 chown -R builder:builder /work

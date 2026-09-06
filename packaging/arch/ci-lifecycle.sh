@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Run in a fresh archlinux:base container with only the package and fixtures mounted.
 set -euo pipefail
+pacman-key --init
 pacman -Syu --noconfirm
 shopt -s nullglob
 packages=(/packages/*.pkg.tar.zst)
@@ -16,6 +17,11 @@ for path in /usr/bin/asdecided /usr/bin/asdecided-desktop-backend \
     [[ $(pacman -Qoq "$path") == asdecided-desktop ]]
 done
 pacman -Qkk asdecided-desktop
+# Check Unix ownership as well as Pacman's file inventory: fakeroot must never
+# leak the build user's UID into system files.
+while IFS= read -r path; do
+    [[ $(stat -c '%u:%g' "$path") == 0:0 ]]
+done < <(pacman -Qlq asdecided-desktop)
 useradd --create-home tester
 runuser -u tester -- mkdir -p /home/tester/projects /home/tester/.local/share/AsDecided/AsDecided/drafts
 runuser -u tester -- bash -c 'printf "Keep my project\n" > ~/projects/decision.md; printf "Keep my draft\n" > ~/.local/share/AsDecided/AsDecided/drafts/test.json'
