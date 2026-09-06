@@ -63,6 +63,10 @@ jobs:
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
       - name: Build with makepkg in Arch Linux
         run: |
           docker run --rm -v "$GITHUB_WORKSPACE:/work" \
