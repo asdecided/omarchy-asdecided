@@ -51,6 +51,18 @@ private slots:
         QVERIFY(recovered.hasDirty());QCOMPARE(recovered.editorText(),draft);
         recovered.closeTab(0);recovered.confirmDiscard();QVERIFY(!recovered.hasDirty());
     }
+    void repeated_new_filename_preserves_existing_draft() {
+        QTemporaryDir project;copyFixture(project.path());
+        Backend backend;QSignalSpy done(&backend,&Backend::completed);
+        backend.openProject(project.path());QTRY_COMPARE(done.count(),1);
+        backend.newDraft("decision","First draft","fresh.md");QTRY_COMPARE(done.count(),2);
+        const auto draft=backend.editorText()+"\nMy unfinished reasoning.\n";
+        backend.setEditorText(draft);
+        backend.newDraft("decision","Second draft","./fresh.md");
+        QCOMPARE(backend.tabs().size(),1);QCOMPARE(backend.editorText(),draft);
+        QVERIFY(backend.error().contains("already open"));
+        backend.closeTab(0);backend.confirmDiscard();
+    }
     void cancellation_and_missing_backend_recover() {
         const auto realBackend = qgetenv("ASDECIDED_BACKEND");
         QTemporaryDir dir;

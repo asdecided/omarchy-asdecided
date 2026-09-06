@@ -82,6 +82,12 @@ void Backend::closeTab(int index) {
 }
 void Backend::newDraft(const QString &kind,const QString &title,const QString &path) {
     if (projectPath.isEmpty() || busy()) return;
+    const auto target=QDir::cleanPath(QDir(corpusPath).absoluteFilePath(path));
+    for(int i=0;i<sessions.size();++i) {
+        if(QDir::cleanPath(pathOf(sessions[i].toMap()))==target) {
+            activateTab(i);errorText="That filename is already open. Continue its draft or choose another filename.";emit changed();return;
+        }
+    }
     start("template",projectPath,path,{{"kind",kind},{"title",title}});
 }
 void Backend::reviewSave() {
