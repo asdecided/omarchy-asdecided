@@ -1,6 +1,6 @@
 # Native companion architecture
 
-Status: initial read-only application milestone, 6 September 2026.
+Status: local authoring development milestone, 6 September 2026.
 
 The application is named **AsDecided**. The repository is
 `asdecided/omarchy-asdecided`. Omarchy is the first target desktop. This is a
@@ -9,11 +9,11 @@ Quickshell host, browser runtime or resident service is involved.
 
 ## Ownership
 
-- Qt Quick Controls/QML: keyboard-first project, list and reading surfaces.
+- Qt Quick Controls/QML: keyboard-first explorer, tabs, source editor, review dialogs and inspector.
 - Small C++ adapter: Qt process lifecycle, bounded transport, view-model mapping,
-  native file handoff and recent-project UI preferences.
+  native Markdown rendering, draft recovery, file handoff and recent-project preferences.
 - Rust backend: explicit repository selection, corpus access, editor-path checks
-  and a curated read-only engine command surface.
+  and explicit core-backed read, review and write operations.
 - `asdecided/core`: all classification, parsing, search/ranking, validation,
   applicability, source composition, pin verification and override semantics.
 
@@ -32,13 +32,14 @@ operation, sends one UTF-8 JSON request on stdin, then closes stdin. Protocol 1:
 {"protocol":1,"operation":"open","project":"/absolute/repository","query":""}
 ```
 
-Supported operations: `open`, `search`, `scope`, `validate`, `federation`, `locate`.
-There is no arbitrary CLI passthrough. Open and locate return application protocol
-1 envelopes. Other operations return the core's unmodified schema-version-1 JSON.
+Supported operations: `open`, `search`, `scope`, `validate`, `federation`, `locate`,
+`read`, `template`, `review`, `save`, `graph`, `initialize`.
+There is no arbitrary CLI passthrough. Application operations return protocol-1 envelopes; engine reports retain core's
+unmodified schema-version-1 JSON.
 Validation exit 1 carries findings; other nonzero exits are operational failures.
 Malformed JSON and unsupported response versions are refused.
 
-Requests are bounded to 64 KiB. The window caps stdout at 32 MiB and stderr at
+Requests are bounded to 8 MiB; individual edited documents to 1 MiB. The window caps stdout at 32 MiB and stderr at
 64 KiB, sets a 30-second deadline, and kills/reaps the worker on cancellation or
 shutdown. It permits one operation at a time, so an old result cannot overwrite a
 newer project. A failed project selection leaves the prior project intact.
@@ -60,8 +61,8 @@ when override history is present. Search and code-path scope are computed by cor
 with source-aware result mapping. A match that cannot be joined to the displayed
 snapshot requires a refresh. Results are snapshots; refresh after external edits.
 
-Document text is selectable plain Markdown. It is deliberately not interpreted as
-HTML, remote images or executable links. The explicit Open file action accepts
+Source is selectable, editable UTF-8 Markdown. Qt renders a separate local preview
+with HTML disabled and resource loading blocked. The explicit Open file action accepts
 only current local export members, resolves the real path inside the local corpus,
 and rechecks inherited materialisation boundaries before desktop handoff. There
 is a normal filesystem race between verification and an external editor opening a
@@ -69,18 +70,20 @@ path; this is a desktop convenience, not a filesystem sandbox.
 
 Federation status supports core's version-2 manifests. An absent/version-1 manifest
 produces an explanatory engine diagnostic. Browsing retains core's version-1 and
-version-2 support. No source fetches, updates, repins or corpus writes are added.
+version-2 support. No source fetches, updates or repins are added. Explicit local corpus writes follow
+the [authoring contract](authoring.md).
 
-## Milestones
+## Current boundaries
 
-1. **This change:** launch, open/reopen project, browse, engine search, code-path
-   applicability, validation, source status and external editor handoff.
-2. **Authoring:** core-backed creation templates, amend/supersede workflow,
-   proposed-content validation, diff preview, atomic save and conflict detection.
-3. **Federation review:** explain resolution and full update/pin review with an
-   explicit apply workflow and adapter-owned materialisation.
-4. **Agent evidence:** only if actual consumption records exist; never relabel
-   a retrieval preview as something an agent definitely read.
+The workspace supports local template creation and single-document editing,
+proposed-content validation, diff review, atomic saves and conflict detection.
+Draft recovery stores unsaved sessions outside the repository with owner-only
+permissions, retaining the original fingerprint for conflict checks on recovery.
+
+Federation updates, renames, deletions and multi-file supersession need separate
+review semantics. Git commits remain external. Relationship navigation reflects
+the engine's on-disk graph and refreshes after save. It is not a draft graph or an
+agent-consumption record.
 
 The next acceptance gate is installation and keyboard use on a real Omarchy
 Wayland session. Headless Qt rendering and bridge tests do not prove compositor,

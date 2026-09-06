@@ -7,19 +7,22 @@ A standalone native Qt/QML application backed by the Rust engine in
 its engineering knowledge, search with the engine, and inspect the accepted
 decisions governing a code path. Markdown and Git remain the source of truth.
 
-This is the initial read-only application milestone. It is not an Omarchy shell
-plugin. Integrated authoring and federation update review are planned separately.
+A dark, keyboard-first knowledge workspace with a file explorer, document tabs,
+split Markdown editing and preview, and a linked decision-context inspector.
+This is a development application; the first real Omarchy acceptance test is pending.
 
 ## What works
 
-- Repository picker and eight recent projects; refresh after external edits.
-- Artifact browsing with selectable Markdown, source identity and override history.
-- Deterministic search with matched-field evidence.
-- Code-path applicability with the exact matching scope declaration.
-- Structural validation reports, including warnings and failures.
-- Verified version-2 federation source inventory.
-- Open a local artifact in your default Markdown application. Inherited sources
-  remain read-only in this workflow.
+- Open or initialize a project, with eight recent projects.
+- Collapsible artifact explorer and multiple document tabs.
+- Source, split and reading views with Markdown syntax highlighting and zoom.
+- Core templates for decisions, requirements, designs, roadmaps and prompts.
+- Reviewed saves: core validation, readable findings, diff and explicit apply.
+- Atomic file replacement, external-edit conflict detection and local draft recovery.
+- Outgoing relationships, backlinks, source identity and override history.
+- Engine search with matched-field evidence, and code-path applicability.
+- Corpus validation, federation source inventory and external editor handoff.
+- Command palette and unsaved-work prompts. Inherited artifacts stay read-only.
 
 No account, API key, hosted service, Python runtime or model call is needed.
 The Rust backend links core at a fixed reviewed commit; no separate engine
@@ -38,9 +41,8 @@ ASDECIDED_BACKEND="$PWD/target/release/asdecided-desktop-backend" ./build/asdeci
 ```
 
 Open a repository containing `.decided/` and `decisions/`. Legacy `.rac/` and
-`rac/` projects are supported too. Custom corpus layouts and creating a new corpus
-inside the app are not yet supported. Use `decided quickstart` separately when
-initialising a new repository.
+`rac/` projects are supported too. Choose **Initialize project** to create a new
+corpus in an existing folder. Custom corpus layouts are not supported.
 
 ## Install a built bundle
 
@@ -74,7 +76,13 @@ To make a bundle from a source build:
 | Ctrl+O | Open project |
 | Ctrl+F | Focus search / code-path input |
 | Enter in input | Run search / scope lookup |
-| Up / Down in list | Select artifact |
+| Ctrl+N | New artifact from a core template |
+| Ctrl+S | Validate and review changes before saving |
+| Ctrl+P | Commands |
+| Ctrl+E | Cycle source / split / read |
+| Ctrl+Tab | Next document tab |
+| Ctrl+W | Close document tab |
+| Ctrl+= / Ctrl+- | Editor and preview zoom |
 | Ctrl+R | Refresh current project |
 | Ctrl+Shift+V | Validate corpus |
 | Escape | Cancel current work / close report |
@@ -94,12 +102,29 @@ QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software \
   ./build/asdecided --smoke-test "$PWD/tests/fixture"
 ```
 
-Tests exercise the real pinned engine, including a multi-parent federation,
-invalid pins, path confinement and failed project selection. CI also installs and
-runs the packaged application. A real Omarchy Wayland session is still required
+Tests exercise the pinned engine, multi-parent federation, invalid pins, path
+confinement, template creation, validation, save conflicts and recovery. A Qt test
+loads the actual QML editor, changes text, reviews and saves to a temporary project.
+CI also installs and runs the packaged application. A real Omarchy Wayland session is still required
 to verify the compositor, native dialogs and default editor handoff.
 
-See [architecture and milestone boundaries](docs/architecture.md).
+## First laptop test
+
+1. Install the latest PR artifact and launch **AsDecided** from the app launcher.
+2. Open a disposable copy of a project; browse and search its decisions.
+3. Edit a local document, switch tabs, return, then press Ctrl+S to review and apply.
+4. Create a new artifact, complete its template sections, and review its first save.
+5. Edit an open file externally and confirm the app preserves your draft on conflict.
+6. Check window resizing, keyboard focus, folder dialogs and external file handoff.
+
+Draft recovery is local application data, not a repository commit. Explicit discard
+removes the recovered buffer. Saves change Markdown files; Git commits remain yours.
+The app does not yet rename/delete artifacts, fetch or repin federation sources,
+or perform multi-file supersession transactions. Relationships can be edited in
+Markdown and are checked by core before save. Preview links and embedded images
+are not activated; use the relationship inspector to navigate recorded links.
+
+See [architecture](docs/architecture.md) and the [authoring contract](docs/authoring.md).
 
 Apache-2.0. The initial icon and federation fixture are reused from
 `asdecided/core` at the pinned commit; see [NOTICE](NOTICE).
