@@ -30,8 +30,13 @@ installation is required. Parent sources must already be materialised locally.
 
 ## Install on Omarchy / Arch
 
-Download the **asdecided-arch-x86_64** artifact from a passing GitHub Actions run
-and extract its ZIP. In that directory, verify the package checksum and install:
+Open the [public development releases](https://github.com/asdecided/omarchy-asdecided/releases)
+and copy the **Install directly with Pacman** command from the release notes.
+It downloads and installs the package directly from GitHub; no account, ZIP
+extraction or local compiler is needed.
+
+Alternatively, download the `.pkg.tar.zst` and adjacent checksum from the release,
+then install the local file:
 
 ```bash
 sha256sum -c asdecided-desktop-*.pkg.tar.zst.sha256
@@ -42,8 +47,7 @@ Pacman installs the native app, backend and launcher system-wide and resolves Qt
 and other runtime dependencies from your configured Arch repositories. Open
 **AsDecided** from your application launcher. No local compiler is needed.
 
-To update, download the newer passing package and run the same `pacman -U`
-command. To remove the application:
+To update, use the newer release's `pacman -U` command. To remove the application:
 
 ```bash
 sudo pacman -R asdecided-desktop

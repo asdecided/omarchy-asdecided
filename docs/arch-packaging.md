@@ -58,3 +58,21 @@ repository. This change does not claim official Arch, AUR or Omarchy inclusion.
 
 References: [PKGBUILD manual](https://pacman.archlinux.page/PKGBUILD.5.html) and
 [Pacman manual](https://pacman.archlinux.page/pacman.8.html).
+
+## Public development releases
+
+After the native and Arch jobs pass, pushes to `main` publish a prerelease named
+`dev-<full-commit>`. During initial review, a push to `codex/native-companion` whose
+head commit message contains `[publish-dev]` explicitly requests the same path.
+Pull-request events and other branches never publish. This keeps test builds
+separate from stable releases and does not require merging to test the first app.
+
+The publisher checks source identity and checksums, fills a draft with the package
+and metadata, and then publishes it. Retrying compares existing asset bytes and
+only uploads missing files. Conflicting bytes stop the job; uploads never use
+`--clobber`. A separate clean Arch container downloads without GitHub credentials,
+checks the checksum, installs from the public URL, verifies the installed revision
+and window launch, and removes the app. Its result is part of the publishing job.
+
+The release notes carry the exact one-command install URL. GitHub Actions ZIPs
+remain available for contributors, but are no longer the normal install route.
