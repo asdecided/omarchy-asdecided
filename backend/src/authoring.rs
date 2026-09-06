@@ -182,7 +182,9 @@ impl Project {
         };
         let report: Value = serde_json::from_str(&output::render_stdin_corpus_json(&validation))
             .map_err(|e| e.to_string())?;
-        let diff = TextDiff::from_lines(old.as_str(), text)
+        let diff = TextDiff::configure()
+            .timeout(std::time::Duration::from_secs(2))
+            .diff_lines(old.as_str(), text)
             .unified_diff()
             .context_radius(3)
             .header("On disk", "Your draft")
