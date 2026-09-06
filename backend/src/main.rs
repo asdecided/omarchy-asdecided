@@ -1,10 +1,11 @@
-//! One bounded request per process. No server, shell, network, or mutation API.
+//! Native workspace operations. Writes are explicit and checked by the authoring module.
+mod authoring;
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 
-const REQUEST_LIMIT: u64 = 65_536;
+const REQUEST_LIMIT: u64 = 8 * 1024 * 1024;
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -14,6 +15,16 @@ struct Request {
     project: String,
     #[serde(default)]
     query: String,
+    #[serde(default)]
+    content: String,
+    #[serde(default)]
+    expected_hash: String,
+    #[serde(default)]
+    new_file: bool,
+    #[serde(default)]
+    kind: String,
+    #[serde(default)]
+    title: String,
 }
 
 #[derive(Deserialize)]
@@ -25,6 +36,12 @@ enum Operation {
     Scope,
     Federation,
     Locate,
+    Read,
+    Template,
+    Review,
+    Save,
+    Graph,
+    Initialize,
 }
 
 struct Project {
@@ -126,12 +143,45 @@ fn run(request: Request) -> Result<u8, String> {
     if request.protocol != 1 {
         return Err("Unsupported desktop protocol version.".into());
     }
+    if matches!(request.operation, Operation::Initialize) {
+        println!(
+            "{}",
+            authoring::initialize(&request.project, &request.query)?
+        );
+        return Ok(0);
+    }
     let project = Project::open(&request.project)?;
     std::env::set_current_dir(&project.root).map_err(|e| e.to_string())?;
     let dir = project.corpus_str()?.to_owned();
+    let result = match request.operation {
+        Operation::Read => Some(project.read_document(&request.query)?),
+        Operation::Template => {
+            Some(project.template(&request.kind, &request.title, &request.query)?)
+        }
+        Operation::Review => Some(project.review(
+            &request.query,
+            &request.content,
+            &request.expected_hash,
+            request.new_file,
+        )?),
+        Operation::Save => Some(project.save(
+            &request.query,
+            &request.content,
+            &request.expected_hash,
+            request.new_file,
+        )?),
+        Operation::Graph => Some(json!({"protocol":1,"graph":project.graph()?})),
+        _ => None,
+    };
+    if let Some(result) = result {
+        println!("{result}");
+        return Ok(0);
+    }
     let args = match request.operation {
         Operation::Open => {
-            println!("{}", project.documents()?);
+            let mut data = project.documents()?;
+            data["graph"] = project.graph()?;
+            println!("{data}");
             return Ok(0);
         }
         Operation::Locate => {
@@ -150,6 +200,12 @@ fn run(request: Request) -> Result<u8, String> {
         ],
         Operation::Validate => vec!["validate".into(), dir, "--json".into(), "--verify".into()],
         Operation::Scope => vec!["decisions-for".into(), request.query, dir, "--json".into()],
+        Operation::Read
+        | Operation::Template
+        | Operation::Review
+        | Operation::Save
+        | Operation::Graph
+        | Operation::Initialize => unreachable!(),
         Operation::Federation => vec!["corpus".into(), "status".into(), dir, "--json".into()],
     };
     // One engine implementation, statically linked at the reviewed commit. No PATH lookup.
@@ -172,7 +228,7 @@ fn main() {
             .read_to_end(&mut bytes)
             .map_err(|e| e.to_string())?;
         if bytes.len() as u64 > REQUEST_LIMIT {
-            return Err("Desktop request exceeds 64 KiB.".into());
+            return Err("Desktop request exceeds 8 MiB.".into());
         }
         let request =
             serde_json::from_slice(&bytes).map_err(|e| format!("Invalid desktop request: {e}"))?;

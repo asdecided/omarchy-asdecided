@@ -82,7 +82,7 @@ fn protocol_is_bounded_and_has_no_arbitrary_command_passthrough() {
         serde_json::to_vec(&json!({"protocol":2,"operation":"open","project":fixture()})).unwrap(),
         serde_json::to_vec(&json!({"protocol":1,"operation":"delete","project":fixture()}))
             .unwrap(),
-        vec![b' '; 65_537],
+        vec![b' '; 8 * 1024 * 1024 + 1],
     ] {
         let result = call_bytes(&bytes);
         assert_eq!(result.status.code(), Some(2));
@@ -168,4 +168,148 @@ fn verified_federation_preserves_history_and_refuses_inherited_editor_handoff() 
         broken.stdout.is_empty(),
         "Never show a partial unverified inherited corpus"
     );
+}
+
+fn edit_call(
+    root: &Path,
+    operation: &str,
+    path: &str,
+    text: &str,
+    hash: &str,
+    new_file: bool,
+) -> Output {
+    call_bytes(
+        &serde_json::to_vec(
+            &json!({"protocol":1,"operation":operation,"project":root,"query":path,
+        "content":text,"expected_hash":hash,"new_file":new_file}),
+        )
+        .unwrap(),
+    )
+}
+#[test]
+fn authoring_review_save_reopen_and_external_conflict() {
+    let temp = tempfile::tempdir().unwrap();
+    copy_tree(&fixture(), temp.path());
+    let path = temp.path().join("decisions/native.md");
+    let path = path.to_str().unwrap();
+    let original = value(&call(temp.path(), "read", path));
+    let hash = original["hash"].as_str().unwrap();
+    let text = original["text"]
+        .as_str()
+        .unwrap()
+        .replace("Qt for presentation", "native Qt for presentation");
+    let review = edit_call(temp.path(), "review", path, &text, hash, false);
+    assert!(review.status.success());
+    assert_eq!(value(&review)["valid"], true);
+    assert!(value(&review)["diff"]
+        .as_str()
+        .unwrap()
+        .contains("+Use native Qt"));
+    assert_eq!(
+        fs::read_to_string(path).unwrap(),
+        original["text"].as_str().unwrap(),
+        "Review must not write"
+    );
+    let saved = edit_call(temp.path(), "save", path, &text, hash, false);
+    assert!(
+        saved.status.success(),
+        "{}",
+        String::from_utf8_lossy(&saved.stderr)
+    );
+    assert_eq!(fs::read_to_string(path).unwrap(), text);
+    let new_hash = value(&saved)["hash"].as_str().unwrap().to_string();
+    assert_eq!(value(&call(temp.path(), "read", path))["hash"], new_hash);
+    fs::write(path, format!("{text}\nExternal change\n")).unwrap();
+    let conflict = edit_call(temp.path(), "save", path, &text, &new_hash, false);
+    assert!(!conflict.status.success());
+    assert!(String::from_utf8_lossy(&conflict.stderr).contains("changed on disk"));
+    assert!(fs::read_to_string(path)
+        .unwrap()
+        .contains("External change"));
+}
+#[test]
+fn invalid_drafts_identity_changes_and_path_escapes_never_write() {
+    let temp = tempfile::tempdir().unwrap();
+    copy_tree(&fixture(), temp.path());
+    let path = temp.path().join("decisions/native.md");
+    let path = path.to_str().unwrap();
+    let original = value(&call(temp.path(), "read", path));
+    let text = original["text"].as_str().unwrap();
+    let hash = original["hash"].as_str().unwrap();
+    let invalid = text.replace("## Decision", "## Missing");
+    let review = edit_call(temp.path(), "review", path, &invalid, hash, false);
+    assert_eq!(value(&review)["valid"], false);
+    assert!(!edit_call(temp.path(), "save", path, &invalid, hash, false)
+        .status
+        .success());
+    let changed_id = text.replace("APP-KTQ63DPSMF19", "APP-KTQ63DPX18Q7");
+    assert!(
+        !edit_call(temp.path(), "save", path, &changed_id, hash, false)
+            .status
+            .success()
+    );
+    assert!(
+        !edit_call(temp.path(), "save", "../outside.md", text, "", true)
+            .status
+            .success()
+    );
+    assert_eq!(fs::read_to_string(path).unwrap(), text);
+}
+#[test]
+fn templates_are_unsaved_and_creation_is_no_clobber() {
+    let temp = tempfile::tempdir().unwrap();
+    copy_tree(&fixture(), temp.path());
+    let draft=call_bytes(&serde_json::to_vec(&json!({"protocol":1,"operation":"template","project":temp.path(),"query":"new.md","kind":"decision","title":"A new native decision"})).unwrap());
+    assert!(draft.status.success());
+    let data = value(&draft);
+    let path = data["path"].as_str().unwrap();
+    assert!(!Path::new(path).exists());
+    let text = data["text"].as_str().unwrap();
+    assert!(text.contains("# A new native decision"));
+    let saved = edit_call(temp.path(), "save", path, text, "", true);
+    assert!(
+        saved.status.success(),
+        "{}",
+        String::from_utf8_lossy(&saved.stderr)
+    );
+    assert_eq!(fs::read_to_string(path).unwrap(), text);
+    assert!(!edit_call(temp.path(), "save", path, text, "", true)
+        .status
+        .success());
+}
+#[test]
+fn initialization_is_explicit_and_never_replaces_a_project() {
+    let temp = tempfile::tempdir().unwrap();
+    assert!(!call(temp.path(), "initialize", "bad key").status.success());
+    assert!(!temp.path().join(".decided").exists());
+    assert!(call(temp.path(), "initialize", "APP").status.success());
+    assert_eq!(
+        value(&call(temp.path(), "open", ""))["documents"]
+            .as_array()
+            .unwrap()
+            .len(),
+        0
+    );
+    assert!(!call(temp.path(), "initialize", "OTHER").status.success());
+    assert!(fs::read_to_string(temp.path().join(".decided/config.yaml"))
+        .unwrap()
+        .contains("APP"));
+}
+#[test]
+fn inherited_documents_cannot_enter_the_write_path() {
+    let temp = tempfile::tempdir().unwrap();
+    copy_tree(
+        &Path::new(env!("CARGO_MANIFEST_DIR")).join("../tests/federation"),
+        temp.path(),
+    );
+    let path = temp
+        .path()
+        .join("vendor/platform/decisions/platform-policy.md");
+    let path = path.to_str().unwrap();
+    let original = fs::read_to_string(path).unwrap();
+    assert!(!call(temp.path(), "read", path).status.success());
+    assert!(!edit_call(temp.path(), "save", path, &original, "", false)
+        .status
+        .success());
+    assert_eq!(fs::read_to_string(path).unwrap(), original);
 }
