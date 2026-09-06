@@ -28,6 +28,35 @@ No account, API key, hosted service, Python runtime or model call is needed.
 The Rust backend links core at a fixed reviewed commit; no separate engine
 installation is required. Parent sources must already be materialised locally.
 
+## Install on Omarchy / Arch
+
+Download the **asdecided-arch-x86_64** artifact from a passing GitHub Actions run
+and extract its ZIP. In that directory, verify the package checksum and install:
+
+```bash
+sha256sum -c asdecided-desktop-*.pkg.tar.zst.sha256
+sudo pacman -U ./asdecided-desktop-*.pkg.tar.zst
+```
+
+Pacman installs the native app, backend and launcher system-wide and resolves Qt
+and other runtime dependencies from your configured Arch repositories. Open
+**AsDecided** from your application launcher. No local compiler is needed.
+
+To update, download the newer passing package and run the same `pacman -U`
+command. To remove the application:
+
+```bash
+sudo pacman -R asdecided-desktop
+```
+
+Your project Markdown, preferences and recovered drafts remain in your home
+folder. The package contains no scripts that modify user files.
+
+This is a development package. It is not yet published in Arch's repositories,
+the AUR or an Omarchy package repository; `pacman -S asdecided-desktop` and automatic
+`pacman -Syu` updates are not available. A configured repository is the next
+separate distribution step. See [Arch packaging](docs/arch-packaging.md).
+
 ## Build on Omarchy / Arch
 
 Install the build tools and native dependencies:
@@ -44,9 +73,9 @@ Open a repository containing `.decided/` and `decisions/`. Legacy `.rac/` and
 `rac/` projects are supported too. Choose **Initialize project** to create a new
 corpus in an existing folder. Custom corpus layouts are not supported.
 
-## Install a built bundle
+## Legacy development bundle
 
-CI produces an `asdecided-linux-x86_64` artifact containing a native tarball and
+For development outside Arch, CI also produces an `asdecided-linux-x86_64` artifact containing a native tarball and
 SHA-256 file. This is a development build, not a tagged stable release.
 Qt remains a system dependency; install `qt6-base qt6-declarative qt6-wayland` on
 Omarchy before launching it.
