@@ -57,3 +57,31 @@ jobs:
             dist/*.sha256
             build/smoke.png
             build/qml.log
+  arch:
+    name: Arch package and Pacman lifecycle
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build with makepkg in Arch Linux
+        run: |
+          docker run --rm -v "$GITHUB_WORKSPACE:/work" \
+            archlinux:base-devel bash /work/packaging/arch/ci-build.sh
+      - name: Install, upgrade and remove in a clean Arch runtime
+        run: |
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE/dist/arch:/packages:ro" \
+            -v "$GITHUB_WORKSPACE/tests/fixture:/fixture:ro" \
+            -v "$GITHUB_WORKSPACE/packaging/arch/ci-lifecycle.sh:/test.sh:ro" \
+            archlinux:base bash /test.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: asdecided-arch-x86_64
+          if-no-files-found: error
+          path: |
+            dist/arch/*.pkg.tar.zst
+            dist/arch/*.pkg.tar.zst.sha256
+            dist/arch/PKGBUILD
+            dist/arch/.SRCINFO
+            dist/arch/SOURCE_COMMIT
+          include-hidden-files: true
