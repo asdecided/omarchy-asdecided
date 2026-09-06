@@ -89,3 +89,42 @@ jobs:
             dist/arch/.SRCINFO
             dist/arch/SOURCE_COMMIT
           include-hidden-files: true
+  publish:
+    name: Publish and verify public development package
+    needs: [native, arch]
+    if: >-
+      github.repository == 'asdecided/omarchy-asdecided' &&
+      github.event_name == 'push' &&
+      (github.ref == 'refs/heads/main' ||
+       (github.ref == 'refs/heads/codex/native-companion' &&
+        contains(github.event.head_commit.message, '[publish-dev]')))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    concurrency:
+      group: public-development-${{ github.sha }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: asdecided-arch-x86_64
+          path: release-artifact
+      - name: Publish verified package without replacing existing assets
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ./packaging/release/publish.sh release-artifact
+      - name: Install from the public URL without GitHub credentials
+        env:
+          PACKAGE_URL: ${{ steps.release.outputs.package_url }}
+          CHECKSUM_URL: ${{ steps.release.outputs.checksum_url }}
+          EXPECTED_REVISION: ${{ github.sha }}
+        run: |
+          docker run --rm -e PACKAGE_URL -e CHECKSUM_URL -e EXPECTED_REVISION \
+            -v "$GITHUB_WORKSPACE/tests/fixture:/fixture:ro" \
+            -v "$GITHUB_WORKSPACE/packaging/release/verify-public.sh:/test.sh:ro" \
+            archlinux:base bash /test.sh
