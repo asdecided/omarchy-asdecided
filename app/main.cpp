@@ -14,6 +14,8 @@ int main(int argc, char *argv[]) {
     app.setApplicationVersion("0.1.0");
     app.setDesktopFileName("io.github.asdecided.AsDecided");
     QQuickStyle::setStyle("Fusion");
+    qmlRegisterType<MarkdownView>("AsDecided",1,0,"MarkdownView");
+    qmlRegisterType<MarkdownHighlighter>("AsDecided",1,0,"MarkdownHighlighter");
     Backend backend;
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty("companion", &backend);
