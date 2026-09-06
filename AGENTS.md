@@ -5,8 +5,8 @@
   process transport, presentation and desktop integration. Do not add a Python runtime.
 - Reuse the pinned `asdecided/core` implementation for classification, search,
   validation, scope and federation. Do not fork these semantics into the app.
-- Corpus Markdown and repository configuration are read-only in this milestone.
-  Any future writes require a reviewed design, diff preview and explicit user action.
+- Explicit local authoring follows docs/authoring.md: core validation, diff preview,
+  conflict detection and a separate user Apply action. Inherited sources stay read-only.
 - Preserve source identity, inherited read-only boundaries and override history.
   Do not imply search or scope results prove actual agent consumption.
 - Requests go through bounded stdin to the sibling backend, not a shell or a daemon.
